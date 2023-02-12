@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(OpenGlLinkers -lglut -lGLU -lGL) # setting all the Glut libraries as one variable.
 
 
-add_executable(
+add_executable( Projeto
         Classes/Model.cpp
         main.cpp)
 
