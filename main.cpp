@@ -2,7 +2,7 @@
 #include "util/declaration.h"
 #include "Classes/Model.cpp"
 
-auto malha = new Model("Modelos/3DModel.obj");
+auto malha = new Model("Modelos/Bone.obj");
 
 
 void createEnvironment(void)
@@ -133,7 +133,7 @@ void renderObject(void)
     glRotatef(rotation_angle, 0.0, 1.0, 0.0);
     glPushMatrix();
     glRotatef(0.0,0.0,0.0,1.0);
-
+    glScalef(5, 5, 5);
     malha->draw();
     glPopMatrix();
     glPopMatrix();
