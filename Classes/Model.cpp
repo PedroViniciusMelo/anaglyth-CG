@@ -55,18 +55,18 @@ public:
     }
 
     void draw(){
-        glBegin(GL_TRIANGLES);
         for (const auto& face : faces_) {
             const auto& vertex_indices = face.first;
             const auto& normal_indices = face.second;
+            glBegin(GL_TRIANGLES);
             for (int i = 0; i < 3; ++i) {
                 const auto& vertex = vertices_[vertex_indices[i] - 1];
                 const auto& normal = normals_[normal_indices[i] - 1];
                 glNormal3f(normal[0], normal[1], normal[2]);
                 glVertex3f(vertex[0], vertex[1], vertex[2]);
             }
+            glEnd();
         }
-        glEnd();
     }
 
 private:

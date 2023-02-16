@@ -1,11 +1,58 @@
+#include <cstdlib>
+#include <cmath>
 #include <GL/glut.h>
-#include "util/declaration.h"
+#include <curses.h>
+#include "util/settings.h"
 #include "Classes/Model.cpp"
 
-auto malha = new Model("Modelos/Bone.obj");
+/*
+   Anaglyphs implementados em OpenGL
+   Adiciona as duas imagens no buffer de acumulação
+   Observação
+   1. Todos os objetos devem ser desenhados em tons de cinza!
+*/
 
 
-void createEnvironment()
+int tela_cheia = FALSE;
+int tipo_btn_mouse = -1;
+float velocidade_de_rotacao = 0.5;     /* Velocidade de rotação dos objetos      */
+double angulo_de_rotacao = 1.0;         /* Incremento do ângulo de rotação da câmera */
+CAMERA camera;
+XYZ origem = {0.0, 0.0, 0.0};
+
+
+int main(int argc,char **argv)
+{
+    glutInit(&argc,argv);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_ACCUM | GLUT_RGB | GLUT_DEPTH);
+
+    //Configurações da tela
+    glutCreateWindow("Anaglyph");
+    camera.largura_tela = 400;
+    camera.altura_tela = 300;
+    glutReshapeWindow(camera.largura_tela, camera.altura_tela);
+    if (tela_cheia)
+        glutFullScreen();
+
+    //Callbacks
+    glutDisplayFunc(display);
+    glutReshapeFunc(processar_reajuste_janela);
+    glutVisibilityFunc(visualizacao_da_janela);
+    glutKeyboardFunc(processar_teclado);
+    glutSpecialFunc(processar_direcionais);
+    glutMouseFunc(processar_mouse);
+    glutMotionFunc(processar_movimento_mouse);
+
+    //Cena
+    configurar_ambiente();
+    camera_origem(0);
+
+    glutMainLoop();
+    return(0);
+}
+
+
+void configurar_ambiente()
 {
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_LINE_SMOOTH);
@@ -13,238 +60,353 @@ void createEnvironment()
     glDisable(GL_POLYGON_SMOOTH);
     glDisable(GL_DITHER);
     glDisable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_COLOR);
+    glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
     glLineWidth(1.0);
     glPointSize(1.0);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
     glFrontFace(GL_CW);
     glClearColor(0.0,0.0,0.0,0.0);
-    glClearAccum(0.0,0.0,0.0,0.0);
-    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+    glClearAccum(0.0,0.0,0.0,0.0);   /* The default */
+    glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);
     glEnable(GL_COLOR_MATERIAL);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ALIGNMENT,1);
 }
 
-void setup_left(){
+void display()
+{
+    XYZ r;
+    double escala,radiandos,metade_distancia,ndfl;
+    double esquerda,direita,cima,inferior,proximidade,distancia=10000;
+
+    /* Faz recorte da imagem */
+    proximidade = camera.distancia_focal / 5;
+
+    /* Cálculo do vetor direito */
+    CROSSPROD(camera.vd,camera.vu,r);
+    normalizar(&r);
+    r.x *= camera.separacao_olhos / 2.0;
+    r.y *= camera.separacao_olhos / 2.0;
+    r.z *= camera.separacao_olhos / 2.0;
+
+    escala  = camera.largura_tela / (double)camera.altura_tela;
+    radiandos = DTOR * camera.abertura / 2;
+    metade_distancia     = proximidade * tan(radiandos);
+    ndfl    = proximidade / camera.distancia_focal;
+
+    /* Seta o buffer para writing e reading */
     glDrawBuffer(GL_BACK);
     glReadBuffer(GL_BACK);
+
+    /* Resetando buffer para garantir que o filtro será aplicado corretamente */
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glClear(GL_ACCUM_BUFFER_BIT);
-    glViewport(0,0,camera.screen_width,camera.screen_height);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    if(lens_type == RED){
-        glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
-    }else if (lens_type == CYAN_RED){
-        glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClear(GL_ACCUM_BUFFER_BIT); /* Not strictly necessary */
 
-    }
-}
+    glViewport(0, 0, camera.largura_tela, camera.altura_tela);
 
-void setup_view(int face, double &left, double &right, double &top, double &bottom, double &near, double &far, double escala_tela, double metade_largura, double ndfl){
+    /* Filtro do olho esquerdo */
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+    glColorMask(GL_TRUE,GL_FALSE,GL_FALSE,GL_TRUE);
+
+    /* Cálculos da matriz de projeção */
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    if(face == LEFT){
-        left  = - escala_tela * metade_largura + 0.5 * camera.eye_separation * ndfl;
-        right = escala_tela * metade_largura + 0.5 * camera.eye_separation * ndfl;
-    }else{
-        left  = - escala_tela * metade_largura - 0.5 * camera.eye_separation * ndfl;
-        right = escala_tela * metade_largura - 0.5 * camera.eye_separation * ndfl;
-    }
-    top    =   metade_largura;
-    bottom = - metade_largura;
-    glFrustum(left, right, bottom, top, near, far);
+    esquerda  = - escala * metade_distancia + 0.5 * camera.separacao_olhos * ndfl;
+    direita = escala * metade_distancia + 0.5 * camera.separacao_olhos * ndfl;
+    cima    =   metade_distancia;
+    inferior = - metade_distancia;
+    glFrustum(esquerda, direita, inferior, cima, proximidade, distancia);
 
-}
-
-void setup_right(){
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glAccum(GL_LOAD, 1.0);
-    glDrawBuffer(GL_BACK);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    if(lens_type == RED){
-        glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
-    }else if (lens_type == CYAN_RED){
-        glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
-
-    }
-}
-
-void draw_scene(int face, Vertice r){
+    /* Renderiza o modelo */
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    if(face == LEFT){
-        gluLookAt(camera.vp.x - r.x,camera.vp.y - r.y,camera.vp.z - r.z,
-                  camera.vp.x - r.x + camera.vd.x,
-                  camera.vp.y - r.y + camera.vd.y,
-                  camera.vp.z - r.z + camera.vd.z,
-                  camera.vu.x,camera.vu.y,camera.vu.z);
-    }else{
-        gluLookAt(camera.vp.x + r.x,camera.vp.y + r.y,camera.vp.z + r.z,
-                  camera.vp.x + r.x + camera.vd.x,
-                  camera.vp.y + r.y + camera.vd.y,
-                  camera.vp.z + r.z + camera.vd.z,
-                  camera.vu.x,camera.vu.y,camera.vu.z);
-    }
-
-    render_object();
+    gluLookAt(camera.vp.x - r.x,camera.vp.y - r.y,camera.vp.z - r.z,
+              camera.vp.x - r.x + camera.vd.x,
+              camera.vp.y - r.y + camera.vd.y,
+              camera.vp.z - r.z + camera.vd.z,
+              camera.vu.x,camera.vu.y,camera.vu.z);
+    renderizar_cena();
     glFlush();
-}
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 
+    /* Adiciona ao buffer de acumulação */
+    glAccum(GL_LOAD,1.0);
 
-void  create_view()
-{
-    Vertice r;
-    double ndfl;
-    double left, right, top, bottom, far = 10000;
-    double escala_tela  = camera.screen_width / (double)camera.screen_height;
-    double abertura_camera = DTOR * camera.camera_opening / 2;
-    double proximidade = camera.focal_distance / 5;
-    double metade_largura = proximidade * tan(abertura_camera);
+    glDrawBuffer(GL_BACK);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    CROSSPROD(camera.vd,camera.vu,r);
-    normalize_vector(&r);
-    r.x *= camera.eye_separation / 2.0;
-    r.y *= camera.eye_separation / 2.0;
-    r.z *= camera.eye_separation / 2.0;
-    ndfl    = proximidade / camera.focal_distance;
+    /* Cálculos da matriz de projeção */
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    esquerda  = - escala * metade_distancia - 0.5 * camera.separacao_olhos * ndfl;
+    direita = escala * metade_distancia - 0.5 * camera.separacao_olhos * ndfl;
+    cima    =   metade_distancia;
+    inferior = - metade_distancia;
+    glFrustum(esquerda, direita, inferior, cima, proximidade, distancia);
 
-    setup_left();
-    setup_view(LEFT, left, right, top, bottom, proximidade, far, escala_tela, metade_largura, ndfl);
-    draw_scene(LEFT, r);
+    /* Filtro do olho direito */
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+    glColorMask(GL_FALSE,GL_FALSE,GL_TRUE,GL_TRUE);
 
-    setup_right();
-    setup_view(RIGHT, left, right, top, bottom, proximidade, far, escala_tela, metade_largura, ndfl);
-    draw_scene(RIGHT, r);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    gluLookAt(camera.vp.x + r.x,camera.vp.y + r.y,camera.vp.z + r.z,
+              camera.vp.x + r.x + camera.vd.x,
+              camera.vp.y + r.y + camera.vd.y,
+              camera.vp.z + r.z + camera.vd.z,
+              camera.vu.x,camera.vu.y,camera.vu.z);
+    renderizar_cena();
+    glFlush();
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    /* Adiciona ao buffer de acumulação e retorna a imagem esperada */
     glAccum(GL_ACCUM,1.0);
     glAccum(GL_RETURN,1.0);
 
     glutSwapBuffers();
 }
 
-void render_object()
+/*
+   Renderiza a cena escolhida
+*/
+
+auto malha = new Model("Modelos/Bone.obj");
+void renderizar_cena()
 {
-    static double rotation_angle = 0.0f;
+    static double angulo_de_rotacao = 0.0;
 
     glPushMatrix();
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glPushMatrix();
-    glRotatef((float) rotation_angle, 0.0, 1.0, 0.0);
-    glPushMatrix();
-    glRotatef(0.0,0.0,0.0,1.0);
+    glRotatef((float) angulo_de_rotacao, 0.0, 1.0, 0.0);
     glScalef(5, 5, 5);
     malha->draw();
-    rotation_angle += rotation_speed;
-
     glPopMatrix();
+
+    angulo_de_rotacao += velocidade_de_rotacao;
+    iluminacao();
 }
 
+/*
+   Configuração da iluminação
+*/
+void iluminacao()
+{
+    glEnable(GL_LIGHT0);
 
-void handleKeyboardArrows(int key, int x, int y)
+    glShadeModel(GL_SMOOTH);
+
+    glEnable(GL_LIGHTING);
+}
+
+/*
+   Processa as entradas de teclado
+*/
+void processar_teclado(unsigned char key, int x, int y)
 {
     switch (key) {
-        case GLUT_KEY_LEFT:
-            rotate_camera(-1, 0, 0);
+        case ESC:                            /* Sair */
+        case 'Q':
+        case 'q':
+            exit(0);
+        case 'h':                           /* Recentralizar câmera     */
+        case 'H':
+            camera_origem(0);
             break;
-        case GLUT_KEY_RIGHT:
-            rotate_camera(1, 0, 0);
+        case 'i':                           /* Mover camera para cima */
+        case 'I':
+            translatar_camera(0, 1);
             break;
-        case GLUT_KEY_UP:
-            rotate_camera(0, 1, 0);
+        case 'k':                           /* Mover camera para baixo */
+        case 'K':
+            translatar_camera(0, -1);
             break;
-        case GLUT_KEY_DOWN:
-            rotate_camera(0, -1, 0);
+        case 'j':                           /* Mover camera para esquerda */
+        case 'J':
+            translatar_camera(-1, 0);
+            break;
+        case 'l':                           /* Mover camera para direita */
+        case 'L':
+            translatar_camera(1, 0);
             break;
         default:
             break;
     }
 }
 
-void rotate_camera(int ix, int iy, int iz)
+/*
+   Processa entrada de direcionais, gira a câmera
+*/
+void processar_direcionais(int key, int x, int y)
 {
-    Vertice vp,vu,vd;
-    Vertice right;
-    Vertice newvp,newr;
+    switch (key) {
+        case GLUT_KEY_LEFT:
+            girar_camera(-1, 0, 0);
+            break;
+        case GLUT_KEY_RIGHT:
+            girar_camera(1, 0, 0);
+            break;
+        case GLUT_KEY_UP:
+            girar_camera(0, 1, 0);
+            break;
+        case GLUT_KEY_DOWN:
+            girar_camera(0, -1, 0);
+            break;
+        default:
+            break;
+    }
+}
+
+/*
+   Girar em (ix,iy) ou girar em (iz) a câmera sobre o ponto foco.
+   ix,iy,iz são sinalizadores, 0 não faz nada, +- 1 gira em direções opostas
+*/
+void girar_camera(int ix, int iy, int iz)
+{
+    XYZ vp,vu,vd;
+    XYZ right;
+    XYZ newvp,newr;
     double radius,dd,radians;
     double dx,dy,dz;
 
     vu = camera.vu;
-    normalize_vector(&vu);
+    normalizar(&vu);
     vp = camera.vp;
     vd = camera.vd;
-    normalize_vector(&vd);
+    normalizar(&vd);
     CROSSPROD(vd,vu,right);
-    normalize_vector(&right);
-    radians = camera_rotation_angle * PI / 180.0;
+    normalizar(&right);
+    radians = angulo_de_rotacao * PI / 180.0;
+
+    /* Faz a rolagem */
     if (iz != 0) {
         camera.vu.x += iz * right.x * radians;
         camera.vu.y += iz * right.y * radians;
         camera.vu.z += iz * right.z * radians;
-        normalize_vector(&camera.vu);
+        normalizar(&camera.vu);
         return;
     }
+
+    /* Cálculo da distância do ponto de rotação */
     dx = camera.vp.x - camera.pr.x;
     dy = camera.vp.y - camera.pr.y;
     dz = camera.vp.z - camera.pr.z;
     radius = sqrt(dx*dx + dy*dy + dz*dz);
+
+    /* DEtermina o novo ponto de vista */
     dd = radius * radians;
     newvp.x = vp.x + dd * ix * right.x + dd * iy * vu.x - camera.pr.x;
     newvp.y = vp.y + dd * ix * right.y + dd * iy * vu.y - camera.pr.y;
     newvp.z = vp.z + dd * ix * right.z + dd * iy * vu.z - camera.pr.z;
-    normalize_vector(&newvp);
+    normalizar(&newvp);
     camera.vp.x = camera.pr.x + radius * newvp.x;
     camera.vp.y = camera.pr.y + radius * newvp.y;
     camera.vp.z = camera.pr.z + radius * newvp.z;
+
+    /* Determina o novo vetor direito */
     newr.x = camera.vp.x + right.x - camera.pr.x;
     newr.y = camera.vp.y + right.y - camera.pr.y;
     newr.z = camera.vp.z + right.z - camera.pr.z;
-    normalize_vector(&newr);
+    normalizar(&newr);
     newr.x = camera.pr.x + radius * newr.x - camera.vp.x;
     newr.y = camera.pr.y + radius * newr.y - camera.vp.y;
     newr.z = camera.pr.z + radius * newr.z - camera.vp.z;
+
     camera.vd.x = camera.pr.x - camera.vp.x;
     camera.vd.y = camera.pr.y - camera.vp.y;
     camera.vd.z = camera.pr.z - camera.vp.z;
-    normalize_vector(&camera.vd);
+    normalizar(&camera.vd);
+
+    /* Determine o novo vetor up */
     CROSSPROD(newr,camera.vd,camera.vu);
-    normalize_vector(&camera.vu);
+    normalizar(&camera.vu);
 }
 
-void handleLenses(int whichone)
+/*
+   Translata o ponto de visão da câmera
+   Em resposta às teclas i,j,k,l
+   Move também o local de rotação da câmera
+*/
+void translatar_camera(int ix, int iy)
 {
-    lens_type= whichone;
+    XYZ vu,vd;
+    XYZ right;
+
+    double delta;
+
+    vu = camera.vu;
+    normalizar(&vu);
+    vd = camera.vd;
+    normalizar(&vd);
+    CROSSPROD(vd,vu,right);
+    normalizar(&right);
+    delta = angulo_de_rotacao * camera.distancia_focal / 90.0;
+
+    camera.vp.x += iy * vu.x * delta;
+    camera.vp.y += iy * vu.y * delta;
+    camera.vp.z += iy * vu.z * delta;
+    camera.pr.x += iy * vu.x * delta;
+    camera.pr.y += iy * vu.y * delta;
+    camera.pr.z += iy * vu.z * delta;
+
+    camera.vp.x += ix * right.x * delta;
+    camera.vp.y += ix * right.y * delta;
+    camera.vp.z += ix * right.z * delta;
+    camera.pr.x += ix * right.x * delta;
+    camera.pr.y += ix * right.y * delta;
+    camera.pr.z += ix * right.z * delta;
 }
 
-void  handleVisibility(int visible)
+/*
+   Determina o tipo de botão pressionado do mouse
+*/
+void processar_mouse(int button, int state, int x, int y)
+{
+    if (state == GLUT_DOWN) {
+        if (button == GLUT_LEFT_BUTTON) {
+            tipo_btn_mouse = GLUT_LEFT_BUTTON;
+        } else if (button == GLUT_MIDDLE_BUTTON) {
+            tipo_btn_mouse = GLUT_MIDDLE_BUTTON;
+        }
+    }
+}
+
+/*
+   Função geralmente usada para o redimensionamento da janela
+*/
+void visualizacao_da_janela(int visible)
 {
     if (visible == GLUT_VISIBLE)
-        handleStopwatch(0);
+        timer(0);
     else
         ;
 }
 
-void  handleStopwatch(int value)
+/*
+   Função geralmente usada para o redimensionamento da janela
+*/
+void timer(int value)
 {
     glutPostRedisplay();
-    glutTimerFunc(30,  handleStopwatch, 0);
+    glutTimerFunc(30, timer, 0);
 }
 
-void handle_reshape(int w, int h)
+/*
+   Função de reajuste da janela
+*/
+void processar_reajuste_janela(int w, int h)
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0,0,(GLsizei)w,(GLsizei)h);
-    camera.screen_width = w;
-    camera.screen_height = h;
+    camera.largura_tela = w;
+    camera.altura_tela = h;
 }
 
-void updateCameraOrigin(int mode)
+
+/*
+   Reposiciona a câmera para a origem
+*/
+void camera_origem(int mode)
 {
-    camera.camera_opening = 60;
-    camera.pr = origin;
+    camera.abertura = 60;
+    camera.pr = origem;
 
     camera.vd.x = 1;
     camera.vd.y = 0;
@@ -262,24 +424,52 @@ void updateCameraOrigin(int mode)
         case 0:
         case 2:
         case 4:
-            camera.focal_distance = 10;
+            camera.distancia_focal = 10;
             break;
         case 1:
-            camera.focal_distance = 5;
+            camera.distancia_focal = 5;
             break;
         case 3:
-            camera.focal_distance = 15;
+            camera.distancia_focal = 15;
             break;
         default:
             break;
     }
 
-    camera.eye_separation = camera.focal_distance / 30.0;
+    camera.separacao_olhos = camera.distancia_focal / 30.0;
     if (mode == 4)
-        camera.eye_separation = 0;
+        camera.separacao_olhos = 0;
 }
 
-void normalize_vector(Vertice *p)
+
+/*
+   Processa o movimento do mouse
+*/
+void processar_movimento_mouse(int x, int y)
+{
+    static int xlast=-1,ylast=-1;
+    int dx,dy;
+
+    dx = x - xlast;
+    dy = y - ylast;
+    if (dx < 0)      dx = -1;
+    else if (dx > 0) dx =  1;
+    if (dy < 0)      dy = -1;
+    else if (dy > 0) dy =  1;
+
+    if (tipo_btn_mouse == GLUT_LEFT_BUTTON)
+        girar_camera(-dx, dy, 0);
+    else if (tipo_btn_mouse == GLUT_MIDDLE_BUTTON)
+        girar_camera(0, 0, dx);
+
+    xlast = x;
+    ylast = y;
+}
+
+/*
+   Normaliza um vetor
+*/
+void normalizar(XYZ *p)
 {
     double length;
 
@@ -295,35 +485,4 @@ void normalize_vector(Vertice *p)
     }
 }
 
-/* Main starts here*/
 
-int main(int argc,char **argv)
-{
-    int main_lenss;
-
-    glutInit(&argc,argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_ACCUM | GLUT_RGB | GLUT_DEPTH);
-
-    glutCreateWindow("Anaglyphs Cube 3D");
-    camera.screen_width = 400;
-    camera.screen_height = 300;
-    glutReshapeWindow(camera.screen_width, camera.screen_height);
-
-    glutDisplayFunc(create_view);
-    glutReshapeFunc(handle_reshape);
-    glutVisibilityFunc( handleVisibility);
-    glutSpecialFunc(  handleKeyboardArrows);
-
-    createEnvironment();
-    updateCameraOrigin(0);
-
-    main_lenss = glutCreateMenu(  handleLenses);
-    glutAddMenuEntry("RED and Cyan", RED);
-    glutAddMenuEntry("Cyan and Red", CYAN_RED);
-
-    glutAddSubMenu("Lens Type", main_lenss);
-    glutAddMenuEntry("OUT", 9);
-    glutAttachMenu(GLUT_RIGHT_BUTTON);
-    glutMainLoop();
-    return(0);
-}
