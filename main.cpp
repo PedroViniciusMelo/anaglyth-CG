@@ -5,10 +5,8 @@
 auto malha = new Model("Modelos/Bone.obj");
 
 
-void createEnvironment(void)
+void createEnvironment()
 {
-    int num[2];
-
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_LINE_SMOOTH);
     glDisable(GL_POINT_SMOOTH);
@@ -16,7 +14,7 @@ void createEnvironment(void)
     glDisable(GL_DITHER);
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_COLOR);
     glLineWidth(1.0);
     glPointSize(1.0);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -28,156 +26,121 @@ void createEnvironment(void)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 }
 
-
-void  createView(void)
-{
-    int i,j;
-    XYZ r;
-    double dist, ratio, radians, scale, wd2, ndfl;
-    double left, right, top, bottom, near = 0.1, far = 10000;
-
-    near = camera.focal_distance / 5;
-    CROSSPROD(camera.vd,camera.vu,r);
-    normalizePoints(&r);
-    r.x *= camera.eye_separation / 2.0;
-    r.y *= camera.eye_separation / 2.0;
-    r.z *= camera.eye_separation / 2.0;
-    ratio  = camera.screen_width / (double)camera.screen_height;
-    radians = DTOR * camera.camera_opening / 2;
-    wd2     = near * tan(radians);
-    ndfl    = near / camera.focal_distance;
+void setup_left(){
     glDrawBuffer(GL_BACK);
     glReadBuffer(GL_BACK);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClear(GL_ACCUM_BUFFER_BIT);
     glViewport(0,0,camera.screen_width,camera.screen_height);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    switch (lens_type) {
-        case RED:
-            glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
-            break;
-        case CYAN_RED:
-            glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
-            break;
-    }
+    if(lens_type == RED){
+        glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
+    }else if (lens_type == CYAN_RED){
+        glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
 
+    }
+}
+
+void setup_view(int face, double &left, double &right, double &top, double &bottom, double &near, double &far, double escala_tela, double metade_largura, double ndfl){
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    left  = - ratio * wd2 + 0.5 * camera.eye_separation * ndfl;
-    right =   ratio * wd2 + 0.5 * camera.eye_separation * ndfl;
-    top    =   wd2;
-    bottom = - wd2;
+    if(face == LEFT){
+        left  = - escala_tela * metade_largura + 0.5 * camera.eye_separation * ndfl;
+        right = escala_tela * metade_largura + 0.5 * camera.eye_separation * ndfl;
+    }else{
+        left  = - escala_tela * metade_largura - 0.5 * camera.eye_separation * ndfl;
+        right = escala_tela * metade_largura - 0.5 * camera.eye_separation * ndfl;
+    }
+    top    =   metade_largura;
+    bottom = - metade_largura;
     glFrustum(left, right, bottom, top, near, far);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    gluLookAt(camera.vp.x - r.x,camera.vp.y - r.y,camera.vp.z - r.z,
-              camera.vp.x - r.x + camera.vd.x,
-              camera.vp.y - r.y + camera.vd.y,
-              camera.vp.z - r.z + camera.vd.z,
-              camera.vu.x,camera.vu.y,camera.vu.z);
-    createWorld();
-    glFlush();
+
+}
+
+void setup_right(){
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glAccum(GL_LOAD, 1.0);
     glDrawBuffer(GL_BACK);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    left  = - ratio * wd2 - 0.5 * camera.eye_separation * ndfl;
-    right =   ratio * wd2 - 0.5 * camera.eye_separation * ndfl;
-    top    =   wd2;
-    bottom = - wd2;
-    glFrustum(left, right, bottom, top, near, far);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    switch (lens_type) {
-        case RED:
-            glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
-            break;
-        case CYAN_RED:
-            glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
-            break;
-    }
+    if(lens_type == RED){
+        glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
+    }else if (lens_type == CYAN_RED){
+        glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
 
+    }
+}
+
+void draw_scene(int face, Vertice r){
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(camera.vp.x + r.x,camera.vp.y + r.y,camera.vp.z + r.z,
-              camera.vp.x + r.x + camera.vd.x,
-              camera.vp.y + r.y + camera.vd.y,
-              camera.vp.z + r.z + camera.vd.z,
-              camera.vu.x,camera.vu.y,camera.vu.z);
-    createWorld();
+    if(face == LEFT){
+        gluLookAt(camera.vp.x - r.x,camera.vp.y - r.y,camera.vp.z - r.z,
+                  camera.vp.x - r.x + camera.vd.x,
+                  camera.vp.y - r.y + camera.vd.y,
+                  camera.vp.z - r.z + camera.vd.z,
+                  camera.vu.x,camera.vu.y,camera.vu.z);
+    }else{
+        gluLookAt(camera.vp.x + r.x,camera.vp.y + r.y,camera.vp.z + r.z,
+                  camera.vp.x + r.x + camera.vd.x,
+                  camera.vp.y + r.y + camera.vd.y,
+                  camera.vp.z + r.z + camera.vd.z,
+                  camera.vu.x,camera.vu.y,camera.vu.z);
+    }
+
+    render_object();
     glFlush();
+}
+
+
+void  create_view()
+{
+    Vertice r;
+    double ndfl;
+    double left, right, top, bottom, far = 10000;
+    double escala_tela  = camera.screen_width / (double)camera.screen_height;
+    double abertura_camera = DTOR * camera.camera_opening / 2;
+    double proximidade = camera.focal_distance / 5;
+    double metade_largura = proximidade * tan(abertura_camera);
+
+    CROSSPROD(camera.vd,camera.vu,r);
+    normalize_vector(&r);
+    r.x *= camera.eye_separation / 2.0;
+    r.y *= camera.eye_separation / 2.0;
+    r.z *= camera.eye_separation / 2.0;
+    ndfl    = proximidade / camera.focal_distance;
+
+    setup_left();
+    setup_view(LEFT, left, right, top, bottom, proximidade, far, escala_tela, metade_largura, ndfl);
+    draw_scene(LEFT, r);
+
+    setup_right();
+    setup_view(RIGHT, left, right, top, bottom, proximidade, far, escala_tela, metade_largura, ndfl);
+    draw_scene(RIGHT, r);
+
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glAccum(GL_ACCUM,1.0);
     glAccum(GL_RETURN,1.0);
 
     glutSwapBuffers();
 }
-void createWorld(void)
+
+void render_object()
 {
-    static double rotation_angle = 0.0;
+    static double rotation_angle = 0.0f;
 
     glPushMatrix();
-    glRotatef(rotation_angle, 0.0, 1.0, 0.0);
-    renderObject();
-    glPopMatrix();
-}
-
-
-void renderObject(void)
-{
-    static double rotation_angle = 0.0;
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glPushMatrix();
-    glRotatef(rotation_angle, 0.0, 1.0, 0.0);
+    glRotatef((float) rotation_angle, 0.0, 1.0, 0.0);
     glPushMatrix();
     glRotatef(0.0,0.0,0.0,1.0);
     glScalef(5, 5, 5);
     malha->draw();
-    glPopMatrix();
-    glPopMatrix();
     rotation_angle += rotation_speed;
-}
 
-void  handleKeyboard(unsigned char key, int x, int y)
-{
-    switch (key) {
-        /* Move camera up */
-        case 'd':
-        case 'D':
-            translateCamera(0,1);
-            break;
-            /* Move camera down */
-        case 'u':
-        case 'U':
-            translateCamera(0,-1);
-            break;
-            /* Move camera left */
-        case 'l':
-        case 'L':
-            translateCamera(-1,0);
-            break;
-            /* Move camera right */
-        case 'r':
-        case 'R':
-            translateCamera(1,0);
-            break;
-            /* Get out */
-        case ESC:
-        case 'Q':
-        case 'q':
-            exit(0);
-            break;
-            /* Rotate counterclockwise */
-        case '[':
-            rotateCamera(0,0,-1);
-            break;
-            /* Rotate clockwise */
-        case ']':
-            rotateCamera(0,0,1);
-            break;
-    }
+    glPopMatrix();
 }
 
 
@@ -185,41 +148,43 @@ void handleKeyboardArrows(int key, int x, int y)
 {
     switch (key) {
         case GLUT_KEY_LEFT:
-            rotateCamera(-1, 0, 0);
+            rotate_camera(-1, 0, 0);
             break;
         case GLUT_KEY_RIGHT:
-            rotateCamera(1, 0, 0);
+            rotate_camera(1, 0, 0);
             break;
         case GLUT_KEY_UP:
-            rotateCamera(0, 1, 0);
+            rotate_camera(0, 1, 0);
             break;
         case GLUT_KEY_DOWN:
-            rotateCamera(0, -1, 0);
+            rotate_camera(0, -1, 0);
+            break;
+        default:
             break;
     }
 }
 
-void rotateCamera(int ix,int iy,int iz)
+void rotate_camera(int ix, int iy, int iz)
 {
-    XYZ vp,vu,vd;
-    XYZ right;
-    XYZ newvp,newr;
+    Vertice vp,vu,vd;
+    Vertice right;
+    Vertice newvp,newr;
     double radius,dd,radians;
     double dx,dy,dz;
 
     vu = camera.vu;
-    normalizePoints(&vu);
+    normalize_vector(&vu);
     vp = camera.vp;
     vd = camera.vd;
-    normalizePoints(&vd);
+    normalize_vector(&vd);
     CROSSPROD(vd,vu,right);
-    normalizePoints(&right);
+    normalize_vector(&right);
     radians = camera_rotation_angle * PI / 180.0;
     if (iz != 0) {
         camera.vu.x += iz * right.x * radians;
         camera.vu.y += iz * right.y * radians;
         camera.vu.z += iz * right.z * radians;
-        normalizePoints(&camera.vu);
+        normalize_vector(&camera.vu);
         return;
     }
     dx = camera.vp.x - camera.pr.x;
@@ -230,66 +195,23 @@ void rotateCamera(int ix,int iy,int iz)
     newvp.x = vp.x + dd * ix * right.x + dd * iy * vu.x - camera.pr.x;
     newvp.y = vp.y + dd * ix * right.y + dd * iy * vu.y - camera.pr.y;
     newvp.z = vp.z + dd * ix * right.z + dd * iy * vu.z - camera.pr.z;
-    normalizePoints(&newvp);
+    normalize_vector(&newvp);
     camera.vp.x = camera.pr.x + radius * newvp.x;
     camera.vp.y = camera.pr.y + radius * newvp.y;
     camera.vp.z = camera.pr.z + radius * newvp.z;
     newr.x = camera.vp.x + right.x - camera.pr.x;
     newr.y = camera.vp.y + right.y - camera.pr.y;
     newr.z = camera.vp.z + right.z - camera.pr.z;
-    normalizePoints(&newr);
+    normalize_vector(&newr);
     newr.x = camera.pr.x + radius * newr.x - camera.vp.x;
     newr.y = camera.pr.y + radius * newr.y - camera.vp.y;
     newr.z = camera.pr.z + radius * newr.z - camera.vp.z;
     camera.vd.x = camera.pr.x - camera.vp.x;
     camera.vd.y = camera.pr.y - camera.vp.y;
     camera.vd.z = camera.pr.z - camera.vp.z;
-    normalizePoints(&camera.vd);
+    normalize_vector(&camera.vd);
     CROSSPROD(newr,camera.vd,camera.vu);
-    normalizePoints(&camera.vu);
-}
-
-
-void translateCamera(int ix,int iy)
-{
-    XYZ vp, vu, vd;
-    XYZ right;
-    XYZ newvp, newr;
-    double radians, delta;
-
-    vu = camera.vu;
-    normalizePoints(&vu);
-    vp = camera.vp;
-    vd = camera.vd;
-    normalizePoints(&vd);
-    CROSSPROD(vd,vu,right);
-    normalizePoints(&right);
-    radians = camera_rotation_angle * PI / 180.0;
-    delta = camera_rotation_angle * camera.focal_distance / 90.0;
-
-    camera.vp.x += iy * vu.x * delta;
-    camera.vp.y += iy * vu.y * delta;
-    camera.vp.z += iy * vu.z * delta;
-    camera.pr.x += iy * vu.x * delta;
-    camera.pr.y += iy * vu.y * delta;
-    camera.pr.z += iy * vu.z * delta;
-
-    camera.vp.x += ix * right.x * delta;
-    camera.vp.y += ix * right.y * delta;
-    camera.vp.z += ix * right.z * delta;
-    camera.pr.x += ix * right.x * delta;
-    camera.pr.y += ix * right.y * delta;
-    camera.pr.z += ix * right.z * delta;
-}
-
-
-void handleMain(int whichone)
-{
-    switch (whichone) {
-        case 9:
-            exit(0);
-            break;
-    }
+    normalize_vector(&camera.vu);
 }
 
 void handleLenses(int whichone)
@@ -311,7 +233,7 @@ void  handleStopwatch(int value)
     glutTimerFunc(30,  handleStopwatch, 0);
 }
 
-void handleRemodel(int w,int h)
+void handle_reshape(int w, int h)
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0,0,(GLsizei)w,(GLsizei)h);
@@ -348,6 +270,8 @@ void updateCameraOrigin(int mode)
         case 3:
             camera.focal_distance = 15;
             break;
+        default:
+            break;
     }
 
     camera.eye_separation = camera.focal_distance / 30.0;
@@ -355,7 +279,7 @@ void updateCameraOrigin(int mode)
         camera.eye_separation = 0;
 }
 
-void normalizePoints(XYZ *p)
+void normalize_vector(Vertice *p)
 {
     double length;
 
@@ -375,7 +299,7 @@ void normalizePoints(XYZ *p)
 
 int main(int argc,char **argv)
 {
-    int main_var, main_lenss;
+    int main_lenss;
 
     glutInit(&argc,argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_ACCUM | GLUT_RGB | GLUT_DEPTH);
@@ -385,10 +309,9 @@ int main(int argc,char **argv)
     camera.screen_height = 300;
     glutReshapeWindow(camera.screen_width, camera.screen_height);
 
-    glutDisplayFunc( createView);
-    glutReshapeFunc(handleRemodel);
+    glutDisplayFunc(create_view);
+    glutReshapeFunc(handle_reshape);
     glutVisibilityFunc( handleVisibility);
-    glutKeyboardFunc( handleKeyboard);
     glutSpecialFunc(  handleKeyboardArrows);
 
     createEnvironment();
@@ -398,7 +321,6 @@ int main(int argc,char **argv)
     glutAddMenuEntry("RED and Cyan", RED);
     glutAddMenuEntry("Cyan and Red", CYAN_RED);
 
-    main_var = glutCreateMenu(  handleMain);
     glutAddSubMenu("Lens Type", main_lenss);
     glutAddMenuEntry("OUT", 9);
     glutAttachMenu(GLUT_RIGHT_BUTTON);
