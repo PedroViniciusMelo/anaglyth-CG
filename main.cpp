@@ -8,8 +8,6 @@
 /*
    Anaglyphs implementados em OpenGL
    Adiciona as duas imagens no buffer de acumulação
-   Observação
-   1. Todos os objetos devem ser desenhados em tons de cinza!
 */
 
 
@@ -45,7 +43,7 @@ int main(int argc,char **argv)
 
     //Cena
     configurar_ambiente();
-    camera_origem(0);
+    camera_origem();
 
     glutMainLoop();
     return(0);
@@ -208,7 +206,7 @@ void processar_teclado(unsigned char key, int x, int y)
             exit(0);
         case 'h':                           /* Recentralizar câmera     */
         case 'H':
-            camera_origem(0);
+            camera_origem();
             break;
         case 'i':                           /* Mover camera para cima */
         case 'I':
@@ -403,7 +401,7 @@ void processar_reajuste_janela(int w, int h)
 /*
    Reposiciona a câmera para a origem
 */
-void camera_origem(int mode)
+void camera_origem()
 {
     camera.abertura = 60;
     camera.pr = origem;
@@ -420,25 +418,8 @@ void camera_origem(int mode)
     camera.vp.y = 0;
     camera.vp.z = 0;
 
-    switch (mode) {
-        case 0:
-        case 2:
-        case 4:
-            camera.distancia_focal = 10;
-            break;
-        case 1:
-            camera.distancia_focal = 5;
-            break;
-        case 3:
-            camera.distancia_focal = 15;
-            break;
-        default:
-            break;
-    }
-
+    camera.distancia_focal = 10;
     camera.separacao_olhos = camera.distancia_focal / 30.0;
-    if (mode == 4)
-        camera.separacao_olhos = 0;
 }
 
 

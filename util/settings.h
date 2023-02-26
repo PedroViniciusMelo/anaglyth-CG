@@ -37,7 +37,7 @@ void processar_movimento_mouse(int, int);
 void timer(int);
 void girar_camera(int, int, int);
 void translatar_camera(int, int);
-void camera_origem(int);
+void camera_origem();
 void normalizar(XYZ *p);
 
 #define DTOR            0.0174532925
